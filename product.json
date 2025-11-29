@@ -3,14 +3,14 @@
     "id": "p1",
     "title_uz": "Chuchvara 1kg",
     "title_ru": "Чучвара 1кг",
-    "img": "chuchvara.jpg",
+    "img": "/static/images/chuchvara.jpg",
     "price": "45 000 soʻm"
   },
   {
     "id": "p2",
     "title_uz": "Tovuqli-chuchvara 1kg",
     "title_ru": "Куринный-пельмени 1кг",
-    "img": "chuchvara.jpg",
+    "img": "/static/images/chuchvara.jpg",
     "price": "33 000 soʻm"
   }
   {
