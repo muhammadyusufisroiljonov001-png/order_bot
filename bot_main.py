@@ -21,7 +21,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if WEBAPP_URL:
         kb.append([ InlineKeyboardButton("📦 Открыть", web_app=WebAppInfo(url=WEBAPP_URL)) ])
     else:
-        kb.append([ InlineKeyboardButton("📦 Открыть (не настроено)", callback_data="no_webapp") ])
+        kb.append([ InlineKeyboardButton("📦 Открыть ", callback_data="no_webapp") ])
     kb.append([ InlineKeyboardButton("✍️ Оставить отзыв", callback_data="feedback") ])
     await update.message.reply_text("Добро пожаловать.", reply_markup=InlineKeyboardMarkup(kb))
 
@@ -59,4 +59,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
