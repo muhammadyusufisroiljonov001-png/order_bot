@@ -1,0 +1,92 @@
+{
+  "products": [
+    {
+      "id": "p1",
+      "name_uz": "Go'shtli chuchvara — 1 kg",
+      "name_ru": "Пельмени с говядиной — 1 кг",
+      "price": 45000,
+      "image": "images/chuchvara_beef_1kg.jpg",
+      "desc_uz": "Yuqori sifatli mol go‘shtidan tayyorlangan.",
+      "desc_ru": "Приготовлены из высококачественной говядины."
+    },
+    {
+      "id": "p2",
+      "name_uz": "Tovuqli chuchvara — 1 kg",
+      "name_ru": "Пельмени с курицей — 1 кг",
+      "price": 33000,
+      "image": "images/chuchvara_chicken_1kg.jpg",
+      "desc_uz": "Yengil va mazali tovuq go‘shtidan tayyorlangan.",
+      "desc_ru": "Нежные и вкусные пельмени с курицей."
+    },
+    {
+      "id": "p3",
+      "name_uz": "Tovuqli chuchvara — 500 g",
+      "name_ru": "Пельмени с курицей — 500 г",
+      "price": 17500,
+      "image": "images/chuchvara_chicken_500g.jpg",
+      "desc_uz": "Kichik oila uchun qulay o‘ram.",
+      "desc_ru": "Удобная упаковка для небольшой семьи."
+    },
+    {
+      "id": "p4",
+      "name_uz": "Qo'ziqorinli chuchvara — 1 kg",
+      "name_ru": "Пельмени с грибами — 1 кг",
+      "price": 38000,
+      "image": "images/chuchvara_mushroom_1kg.jpg",
+      "desc_uz": "Tabiiy qoʻziqorinlar va maxsus ziravorlar bilan.",
+      "desc_ru": "С натуральными грибами и специальными приправами."
+    },
+    {
+      "id": "p5",
+      "name_uz": "Krem-sirli chuchvara — 1 kg",
+      "name_ru": "Пельмени с сыром — 1 кг",
+      "price": 39000,
+      "image": "images/chuchvara_cheese_1kg.jpg",
+      "desc_uz": "Ichida eritilgan krem-sir bilan boy taʼm.",
+      "desc_ru": "Богатый вкус с расплавленным крем-сыром внутри."
+    },
+    {
+      "id": "p6",
+      "name_uz": "Sabzavotli vegetarian chuchvara — 1 kg",
+      "name_ru": "Вегетарианские пельмени с овощами — 1 кг",
+      "price": 30000,
+      "image": "images/chuchvara_veggie_1kg.jpg",
+      "desc_uz": "Sabzavotlar bilan to‘ldirilgan, vegetarian uchun mos.",
+      "desc_ru": "С начинкой из овощей, подходит для вегетарианцев."
+    },
+    {
+      "id": "p7",
+      "name_uz": "Qizil baliqli chuchvara — 1 kg",
+      "name_ru": "Пельмени с лососем — 1 кг",
+      "price": 52000,
+      "image": "images/chuchvara_salmon_1kg.jpg",
+      "desc_uz": "Yuqori sifatli qizil baliqdan tayyorlangan.",
+      "desc_ru": "Приготовлены из высококачественного лосося."
+    },
+    {
+      "id": "p8",
+      "name_uz": "Achchiq qoʻy goʻshtli chuchvara — 1 kg",
+      "name_ru": "Острые пельмени со бараниной — 1 кг",
+      "price": 47000,
+      "image": "images/chuchvara_spicy_lamb_1kg.jpg",
+      "desc_uz": "Anʼanaviy ziravorlar bilan achchiq lazzat.",
+      "desc_ru": "Острый вкус с традиционными специями."
+    },
+    {
+      "id": "p9",
+      "name_uz": "Aralash toʻplam (3x500g) — sovg'a paketi",
+      "name_ru": "Сборный набор (3x500г) — подарочная упаковка",
+      "price": 82000,
+      "image": "images/chuchvara_mixed_pack_3x500g.jpg",
+      "desc_uz": "Turli xil taʼmlar: mol, tovuq va qoʻziqorin — oilaviy variant.",
+      "desc_ru": "Разные вкусы: говядина, курица и грибы — для семейного употребления."
+    }
+  ],
+  "orders": [],
+  "admins": [
+    {
+      "username": "admin",
+      "password": "12345"
+    }
+  ]
+}
