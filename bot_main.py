@@ -1,18 +1,38 @@
+# main.py
+"""
+Premium Mini-App (JSON DB) — Flask + aiogram (v3)
+Supports: Uzbek + Russian (lang via ?lang=uz or ?lang=ru)
+"""
+
 import os
 import json
 import datetime
 import threading
 import asyncio
+import uuid
+import time
 from pathlib import Path
 from urllib.request import urlretrieve
-from flask import Flask, render_template, request, send_from_directory
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
+from flask import (
+    Flask, render_template, request, send_from_directory,
+    redirect, url_for, session, jsonify
+)
+from werkzeug.utils import secure_filename
 
-# ---------- Config ----------
+# Optional Telegram
+try:
+    from aiogram import Bot, Dispatcher, types
+    from aiogram.filters import Command
+    from aiogram.fsm.storage.memory import MemoryStorage
+except Exception:
+    Bot = None
+    Dispatcher = None
+    types = None
+    Command = None
+    MemoryStorage = None
+
 BASE = Path(__file__).parent
-DATA_FILE = BASE / "orders.json"
-PRODUCT_FILE = BASE / "products.json"
+DB_FILE = BASE / "database.json"
 TEMPLATES = BASE / "templates"
 STATIC = BASE / "static"
 IMAGES = STATIC / "images"
@@ -22,242 +42,312 @@ TEMPLATES.mkdir(exist_ok=True)
 STATIC.mkdir(exist_ok=True)
 IMAGES.mkdir(parents=True, exist_ok=True)
 
-# Env
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")            # BotFather token
+# Env / config
+BOT_TOKEN = os.environ.get("BOT_TOKEN") or ""
 ORDER_GROUP_ID = None
 try:
-    gid_raw = os.environ.get("ORDER_GROUP_ID") or os.environ.get("GROUP_ID")
+    gid_raw = os.environ.get("ORDER_GROUP_ID")
     if gid_raw:
         ORDER_GROUP_ID = int(gid_raw)
-except:
+except Exception:
     ORDER_GROUP_ID = None
-WEB_URL = os.environ.get("WEB_URL") or os.environ.get("WEBAPP_URL") or ""
 
-# ---------- Default static & templates (created if missing) ----------
-STYLE = STATIC / "style.css"
-if not STYLE.exists():
-    STYLE.write_text('''
-body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111;margin:0;padding:18px}
-.container{max-width:1000px;margin:0 auto}
-.header{font-size:28px;margin-bottom:14px}
-.card{border:1px solid #eee;padding:12px;border-radius:8px;display:inline-block;width:300px;margin:10px;vertical-align:top}
-.card img{width:100%;height:160px;object-fit:cover;background:#f6f6f6}
-.btn{display:inline-block;padding:8px 12px;border-radius:8px;background:#2b8cff;color:#fff;text-decoration:none}
-''', encoding="utf-8")
+WEB_URL = os.environ.get("WEB_URL") or ""
+SECRET_KEY = os.environ.get("SECRET_KEY", "change-me")
 
-INDEX_HTML = TEMPLATES / "index.html"
-if not INDEX_HTML.exists():
-    INDEX_HTML.write_text('''<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/static/style.css"><title>Menu</title></head>
-<body><div class="container"><div class="header">Altindan — Menu</div>
-<div><a href="?lang=uz">uz</a> | <a href="?lang=ru">ru</a></div>
-<div style="margin-top:16px">
-{% for p in products %}
-  <div class="card">
-    <img src="{{ url_for('static', filename='images/'+p.image) }}" alt="{{ p.name_ru }}">
-    <h3>{{ p['name_'+(lang if lang in ['uz','ru'] else 'ru')] }}</h3>
-    <div style="font-weight:bold;margin-top:8px">{{ p.price }} so'm</div>
-    <div style="margin-top:8px"><a class="btn" href="{{ web_url }}/order/{{ p.id }}?lang={{ lang }}">Buyurtma</a></div>
-  </div>
-{% endfor %}
-</div></div></body></html>''', encoding="utf-8")
-
-ORDER_HTML = TEMPLATES / "order.html"
-if not ORDER_HTML.exists():
-    ORDER_HTML.write_text('''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/style.css"></head><body>
-<div class="container"><h2>Buyurtma — {{ product['name_ru'] }}</h2>
-<form method="post">
-<label>Ism: <input name="name" required></label><br><br>
-<label>Tel: <input name="phone" required></label><br><br>
-<label>Miqdor (kg): <input name="qty" value="1" required></label><br><br>
-<label>Izoh:<br><textarea name="note"></textarea></label><br><br>
-<input type="hidden" name="lang" value="{{ lang }}">
-<button class="btn" type="submit">Yuborish</button>
-</form></div></body></html>''', encoding="utf-8")
-
-ORDERED_HTML = TEMPLATES / "ordered.html"
-if not ORDERED_HTML.exists():
-    ORDERED_HTML.write_text('''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/style.css"></head>
-<body><div class="container"><h2>Rahmat!</h2><p>Buyurtmangiz qabul qilindi.</p></div></body></html>''', encoding="utf-8")
-
-# ---------- Default products.json ----------
-if not PRODUCT_FILE.exists():
-    sample = [
-        {"id":"p1","name_uz":"Chuchvara 1kg","name_ru":"Чучвара 1кг","price":20000,"image":"p1.jpg"},
-        {"id":"p2","name_uz":"Manty 1kg","name_ru":"Манты 1кг","price":25000,"image":"p2.jpg"}
-    ]
-    PRODUCT_FILE.write_text(json.dumps(sample, ensure_ascii=False, indent=2), encoding="utf-8")
-
-# create placeholder images if missing
-try:
-    with PRODUCT_FILE.open("r", encoding="utf-8") as f:
-        _products = json.load(f)
-except:
-    _products = []
-for p in _products:
-    imgname = p.get("image") or f"{p.get('id')}.jpg"
-    target = IMAGES / imgname
-    if not target.exists():
-        try:
-            urlretrieve(f"https://via.placeholder.com/800x400?text={p.get('id')}", str(target))
-        except:
-            target.write_text("", encoding="utf-8")
-
-# ---------- Flask app ----------
+# Flask app
 app = Flask(__name__, template_folder=str(TEMPLATES), static_folder=str(STATIC))
+app.secret_key = SECRET_KEY
 
-def load_products():
+ALLOWED_EXT = {"png", "jpg", "jpeg", "gif"}
+
+# --- Database helpers (simple JSON) ---
+def ensure_db():
+    if not DB_FILE.exists():
+        sample = {
+            "products": [
+                {
+                    "id": "p1",
+                    "name_uz": "Go'shtli chuchvara — 1 kg",
+                    "name_ru": "Пельмени с говядиной — 1 кг",
+                    "price": 45000,
+                    "image": "images/chuchvara_beef_1kg.jpg",
+                    "desc_uz": "Yuqori sifatli mol go‘shtidan tayyorlangan.",
+                    "desc_ru": "Приготовлены из высококачественной говядины."
+                }
+            ],
+            "orders": [],
+            "admins": [{"username": "admin", "password": "12345"}]
+        }
+        DB_FILE.write_text(json.dumps(sample, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def read_db():
+    ensure_db()
     try:
-        with PRODUCT_FILE.open("r", encoding="utf-8") as f:
+        with DB_FILE.open("r", encoding="utf-8") as f:
             return json.load(f)
-    except:
-        return []
+    except Exception:
+        return {"products": [], "orders": [], "admins": []}
 
+def write_db(data):
+    with DB_FILE.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# --- Utils ---
+def find_product(pid):
+    db = read_db()
+    for p in db.get("products", []):
+        if p.get("id") == pid:
+            return p
+    return None
+
+def generate_id(prefix="p"):
+    return prefix + uuid.uuid4().hex[:8]
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
+
+# Create placeholder images
+def ensure_sample_images():
+    db = read_db()
+    for p in db.get("products", []):
+        img = p.get("image")
+        if img:
+            path = IMAGES / img
+            if not path.exists():
+                try:
+                    # safe filename path (create directories if nested)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    urlretrieve(f"https://via.placeholder.com/800x400?text={p.get('id')}", str(path))
+                except Exception:
+                    path.write_text("", encoding="utf-8")
+ensure_sample_images()
+
+# --- User routes ---
 @app.route("/")
 def index():
     lang = request.args.get("lang", "ru")
-    products = load_products()
-    web_url = WEB_URL if WEB_URL else request.url_root.rstrip("/")
-    return render_template("index.html", products=products, lang=lang, web_url=web_url)
+    db = read_db()
+    products = db.get("products", [])
+    base_url = WEB_URL if WEB_URL else request.host_url.rstrip("/")
+    return render_template("index.html", products=products, lang=lang, web_url=base_url)
 
-@app.route("/order/<pid>", methods=["GET","POST"])
-def order(pid):
-    products = load_products()
-    product = next((p for p in products if p.get("id")==pid), None)
+@app.route("/order/<product_id>", methods=["GET", "POST"])
+def order(product_id):
+    lang = request.args.get("lang", request.form.get("lang", "ru"))
+    product = find_product(product_id)
     if not product:
         return "Mahsulot topilmadi", 404
+
     if request.method == "POST":
+        name = request.form.get("name", "Anonim")
+        phone = request.form.get("phone", "")
+        try:
+            qty = float(request.form.get("qty", "1"))
+        except:
+            qty = 1.0
+        note = request.form.get("note", "")
+
         order = {
-            "product_id": pid,
-            "product_name": product.get("name_ru"),
-            "price": product.get("price"),
-            "qty": request.form.get("qty","1"),
-            "name": request.form.get("name","Anonim"),
-            "phone": request.form.get("phone",""),
-            "note": request.form.get("note",""),
+            "id": "o" + uuid.uuid4().hex[:8],
+            "product_id": product_id,
+            "product_name": product.get(f"name_{lang}", product.get("name_ru")),
+            "price": product.get("price", 0),
+            "qty": qty,
+            "name": name,
+            "phone": phone,
+            "note": note,
             "time": datetime.datetime.now().isoformat()
         }
-        # save orders
-        try:
-            if not DATA_FILE.exists():
-                DATA_FILE.write_text("[]", encoding="utf-8")
-            with DATA_FILE.open("r", encoding="utf-8") as f:
-                arr = json.load(f)
-        except:
-            arr = []
-        arr.append(order)
-        with DATA_FILE.open("w", encoding="utf-8") as f:
-            json.dump(arr, f, ensure_ascii=False, indent=2)
-        # send to telegram group async
-        try:
-            if 'aioloop' in globals() and globals()['aioloop'] is not None and BOT_TOKEN and ORDER_GROUP_ID:
-                asyncio.run_coroutine_threadsafe(send_order_to_group_async(order), globals()['aioloop'])
-        except Exception as e:
-            print("Send error:", e)
-        return render_template("ordered.html")
-    return render_template("order.html", product=product, lang=request.args.get("lang","ru"))
 
+        db = read_db()
+        db["orders"].append(order)
+        write_db(db)
+
+        # send async telegram
+        try:
+            if globals().get("aioloop"):
+                asyncio.run_coroutine_threadsafe(
+                    send_order_to_group_async(order), globals()["aioloop"]
+                )
+        except Exception as e:
+            print("Telegram send error:", e)
+
+        return render_template("ordered.html", order=order, lang=lang)
+
+    return render_template("order.html", product=product, lang=lang)
+
+# --- Static ---
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory(str(STATIC), filename)
 
-# ---------- Telegram (aiogram v3) ----------
-bot = Bot(token=BOT_TOKEN) if BOT_TOKEN else None
-dp = Dispatcher()
+# --- Admin ---
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        db = read_db()
+        for a in db.get("admins", []):
+            if a["username"] == username and a["password"] == password:
+                session["admin"] = username
+                return redirect(url_for("admin_panel"))
+        return render_template("login.html", error="Invalid credentials")
+    return render_template("login.html", error=None)
 
-def build_order_text(o: dict) -> str:
-    return (f"🆕 Yangi buyurtma\nMahsulot: {o.get('product_name')}\nMiqdor: {o.get('qty')}\nIsm: {o.get('name')}\nTel: {o.get('phone')}\nIzoh: {o.get('note')}\nVaqt: {o.get('time')}")
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin", None)
+    return redirect(url_for("admin_login"))
 
-async def send_order_to_group_async(order: dict):
-    if not bot:
-        print("Bot not configured.")
-        return
-    text = build_order_text(order)
+def admin_required(f):
+    def wrap(*a, **kw):
+        if not session.get("admin"):
+            return redirect(url_for("admin_login"))
+        return f(*a, **kw)
+    wrap.__name__ = f.__name__
+    return wrap
+
+@app.route("/admin")
+@admin_required
+def admin_panel():
+    lang = request.args.get("lang", "ru")
+    db = read_db()
+    return render_template("admin.html", products=db["products"], orders=db["orders"], lang=lang)
+
+# --- API ---
+@app.route("/api/products", methods=["GET", "POST"])
+def api_products():
+    if request.method == "GET":
+        db = read_db()
+        return jsonify(db["products"])
+
+    if not session.get("admin"):
+        return jsonify({"error": "auth required"}), 403
+
+    data = request.form or request.json or {}
+    pid = generate_id("p")
+    product = {
+        "id": pid,
+        "name_uz": data.get("name_uz"),
+        "name_ru": data.get("name_ru"),
+        "price": float(data.get("price", 0)),
+        "image": data.get("image", ""),
+        "desc_uz": data.get("desc_uz", ""),
+        "desc_ru": data.get("desc_ru", "")
+    }
+
+    db = read_db()
+    db["products"].append(product)
+    write_db(db)
+    return jsonify(product), 201
+
+# upload
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    if not session.get("admin"):
+        return jsonify({"error": "auth required"}), 403
+    if "file" not in request.files:
+        return jsonify({"error": "no file"}), 400
+
+    f = request.files["file"]
+    if f.filename == "":
+        return jsonify({"error": "empty filename"}), 400
+    if not allowed_file(f.filename):
+        return jsonify({"error": "invalid file type"}), 400
+
+    filename = secure_filename(f.filename)
+    filename = f"{uuid.uuid4().hex[:8]}_{filename}"
+    save_path = IMAGES / filename
+    f.save(str(save_path))
+    return jsonify({
+        "filename": filename,
+        "url": f"images/{filename}"
+    }), 201
+
+# --- Telegram ---
+bot = None
+dp = None
+if BOT_TOKEN and Bot:
     try:
-        await bot.send_message(ORDER_GROUP_ID, text)
+        bot = Bot(token=BOT_TOKEN)
+        # give memory storage to dispatcher for aiogram v3
+        storage = MemoryStorage() if MemoryStorage else None
+        dp = Dispatcher(storage=storage)
     except Exception as e:
-        print("Telegram send error:", e)
+        print("Aiogram init error:", e)
+        bot = None
+        dp = None
 
-async def cmd_start(message: types.Message):
-    text = "Добро пожаловать"
-    rows = []
-    if WEB_URL:
-        rows.append([types.InlineKeyboardButton(text="Открыть", web_app=types.WebAppInfo(url=f"{WEB_URL}?lang=ru"))])
-    else:
-        rows.append([types.InlineKeyboardButton(text="Открыть (не настроено)", callback_data="no_webapp")])
-    rows.append([types.InlineKeyboardButton(text="✍️ Оставить отзыв", web_app=types.WebAppInfo(url=f"{WEB_URL}?lang=ru"))]) if WEB_URL else None
-    kb = types.InlineKeyboardMarkup(inline_keyboard=rows)
-    await message.answer(text, reply_markup=kb)
+def build_text(o):
+    return (
+        f"🆕 Yangi buyurtma\n"
+        f"Mahsulot: {o['product_name']}\n"
+        f"Miqdor: {o['qty']}\n"
+        f"Ism: {o['name']}\n"
+        f"Tel: {o['phone']}\n"
+        f"Izoh: {o['note']}\n"
+        f"Vaqt: {o['time']}"
+    )
 
-async def cmd_report(message: types.Message):
-    if ORDER_GROUP_ID and message.chat.id != ORDER_GROUP_ID:
-        return await message.reply("Ruxsat yo'q.")
-    try:
-        if DATA_FILE.exists():
-            with DATA_FILE.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-        else:
-            data = []
-    except:
-        data = []
-    total = len(data)
-    total_kg = 0.0
-    total_sum = 0.0
-    for d in data:
-        try:
-            q = float(d.get('qty',0))
-            p = float(d.get('price',0))
-            total_kg += q
-            total_sum += q*p
-        except:
-            pass
-    await message.reply(f"📊 Oy yakunlari:\nJami buyurtma: {total} ta\nJami kg: {total_kg} kg\nJami summa: {int(total_sum)} so'm")
-
-# register handlers
-if bot:
-    dp.message.register(cmd_start, Command(commands=["start"]))
-    dp.message.register(cmd_report, Command(commands=["report"]))
-else:
-    print("BOT_TOKEN not set — Telegram bot disabled (only web runs).")
-
-# ---------- Run ----------
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    # start flask thread
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
-    print("Flask started in background.")
-
-    # if no bot token, keep running web only
+async def send_order_to_group_async(order):
     if not bot:
-        print("BOT_TOKEN not set. Only web active.")
+        return
+    if ORDER_GROUP_ID:
         try:
-            while True:
-                import time
-                time.sleep(1)
-        except KeyboardInterrupt:
-            pass
-        raise SystemExit
+            await bot.send_message(ORDER_GROUP_ID, build_text(order))
+        except Exception as e:
+            print("Failed to send order to group:", e)
 
-    # start aiogram loop
+if dp and types:
+    @dp.message(Command("start"))
+    async def start_cmd(m: types.Message):
+        kb = []
+        if WEB_URL:
+            kb.append([
+                types.InlineKeyboardButton(text="📋 Меню", web_app=types.WebAppInfo(url=f"{WEB_URL}?lang=ru"))
+            ])
+            kb.append([
+                types.InlineKeyboardButton(text="🇺🇿 Menyu", web_app=types.WebAppInfo(url=f"{WEB_URL}?lang=uz"))
+            ])
+        markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
+        await m.answer("Добро пожаловать", reply_markup=markup)
+
+# --- Run ---
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, threaded=True)
+
+def run_bot_loop():
+    if not dp or not bot:
+        print("Bot not configured or aiogram missing. Running web only.")
+        return
+
     aioloop = asyncio.new_event_loop()
-    globals()['aioloop'] = aioloop
     asyncio.set_event_loop(aioloop)
+    globals()["aioloop"] = aioloop
+
     print("Starting aiogram polling...")
     try:
         aioloop.run_until_complete(dp.start_polling(bot))
-    except (KeyboardInterrupt, SystemExit):
-        print("Stopped.")
     except Exception as e:
-        print("Aiogram error:", e)
-    finally:
-        try:
-            aioloop.run_until_complete(aioloop.shutdown_asyncgens())
-            aioloop.close()
-        except:
-            pass
+        print("Polling stopped:", e)
 
+if __name__ == "__main__":
+    # Start Flask in a thread, then start bot loop in main thread so container stays alive
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    print("Flask started.")
+
+    # If bot isn't configured, keep process alive (web-only)
+    if not bot or not dp:
+        print("Web only mode (Telegram disabled).")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("Shutting down.")
+    else:
+        # run bot polling (blocking)
+        run_bot_loop()
