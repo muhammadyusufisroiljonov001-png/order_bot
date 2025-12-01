@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Menu</title></head>
+<body>
+  <h1>Menu</h1>
+  <ul>
+    {% for p in products %}
+      <li>
+        <a href="{{ url_for('order', product_id=p.id) }}">
+          {{ p['name_ru'] if lang=='ru' else p['name_uz'] }} — {{ p.price }} сум
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+</body>
+</html>
