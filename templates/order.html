@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Order</title></head>
+<body>
+  <h1>{{ product['name_ru'] if lang=='ru' else product['name_uz'] }}</h1>
+  <form method="post">
+    <input type="hidden" name="lang" value="{{ lang }}">
+    <label>Ism: <input name="name"></label><br>
+    <label>Tel: <input name="phone"></label><br>
+    <label>Soni: <input name="qty" value="1"></label><br>
+    <label>Izoh: <textarea name="note"></textarea></label><br>
+    <button type="submit">Buyurtma</button>
+  </form>
+</body>
+</html>
